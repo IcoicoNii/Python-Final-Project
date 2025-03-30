@@ -195,3 +195,17 @@ def update_total_expense(report_id):
     conn.close()
 
     print(f"Updated total expense for Report ID {report_id}: {total}")
+
+def changeReportName(report_id, changed_name):
+    conn = sqlite3.connect('expense_tracker.db')
+    cursor = conn.cursor()
+
+    # Change the Target Report Name
+    cursor.execute(f"UPDATE Reports SET report_name = ? WHERE report_id = ?", (changed_name, report_id))
+
+    conn.commit()
+    conn.close()
+
+    print(f"Report ID #{report_id} name changed to '{changed_name}'")
+
+initialize_db()

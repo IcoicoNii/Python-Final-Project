@@ -178,7 +178,6 @@ class ExpenseTrackerApp:
         # ASSIGN SELECTED TO A VARIABLE
         selected_item = self.tree.selection()
 
-        
         if selected_item:
             # Declare initial variables
             self.report_values = self.tree.item(selected_item, "values")
@@ -205,27 +204,37 @@ class ExpenseTrackerApp:
             reportNoLabel = tk.Label(report_window, text = f"REPORT #{report_no}", font = ("Space Mono", 16, "normal"), bg = "#283618", fg = "#dda15e")
             reportNoLabel.place(relx=0.5,rely = 0.13, anchor = tk.CENTER)
 
-            reportNameLabel = tk.Label(container, text = f"{report_name.upper()}", font = ("Montserrat", 32, "bold"), bg = "#283618", fg = "#fefae0")
-            reportNameLabel.pack(pady=(0,10))
+            #TITLE FRAME
+            title_frame = tk.Frame(container, bg = "#283618")
+            title_frame.pack()
+
+            # TITLE
+            self.reportNameLabel = tk.Label(title_frame, text = f"{report_name.upper()}", font = ("Montserrat", 32, "bold"), bg = "#283618", fg = "#fefae0")
+            self.reportNameLabel.grid(row=0, column=0)
+
+            # EDIT BUTTON
+            self.editReportNameBtnImg = PhotoImage(file="./buttons/editReportBtn.png")
+            editReportNameBtnImg = tk.Button(title_frame, image = self.editReportNameBtnImg, command = lambda:self.changeReportName(self.report_values[0]), bg = "#606c38")
+            editReportNameBtnImg.grid(row = 0, column = 1, padx = 10)
 
             # TREE FRAME
             tree_frame = tk.Frame(container)
             tree_frame.pack(pady=0)
         
             # DECLARE TREEVIEW (Instead of Listbox in order to have headings and columns)
-            self.expense_tree = ttk.Treeview(tree_frame, columns=("Date", "Category", "Amount"), show="headings", height=5)
+            self.expense_tree = ttk.Treeview(tree_frame, columns=("Expense No.","Date", "Category", "Amount"), show="headings", height=5)
 
             # Define a tag with a different background color
             self.expense_tree.tag_configure("new_entry", background="#ffd6a8") # COLOR OF THE NEW INSERTED ENTRY
             
-            # self.expense_tree.heading("Expense No.", text="Expense No.")
-            self.expense_tree.heading("Date", text="Date")
-            self.expense_tree.heading("Category", text="Category")
-            self.expense_tree.heading("Amount", text="Amount")
+            self.expense_tree.heading("Expense No.", text="Expense No. ▲▼", command=lambda: self.sort_treeview("Expense No."))
+            self.expense_tree.heading("Date", text="Date ▲▼", command=lambda: self.sort_treeview("Date"))
+            self.expense_tree.heading("Category", text="Category ▲▼", command=lambda: self.sort_treeview("Category"))
+            self.expense_tree.heading("Amount", text="Amount ▲▼", command=lambda: self.sort_treeview("Amount"))
             
-            # self.expense_tree.column("Expense No.", width=140, anchor=tk.CENTER)
-            self.expense_tree.column("Date", width=150, anchor=tk.CENTER)
-            self.expense_tree.column("Category", width=150, anchor=tk.CENTER)
+            self.expense_tree.column("Expense No.", width=150, anchor=tk.CENTER)
+            self.expense_tree.column("Date", width=110, anchor=tk.CENTER)
+            self.expense_tree.column("Category", width=120, anchor=tk.CENTER)
             self.expense_tree.column("Amount", width=130, anchor=tk.CENTER)
             self.expense_tree.pack()
 
@@ -233,7 +242,7 @@ class ExpenseTrackerApp:
             expensesToDisplay = db.get_expenses_for_report(report_no)
             # print(expensesToDisplay)
             for list in expensesToDisplay:
-                self.expense_tree.insert("", tk.END, values=(list[1] ,list[2] , list[3]))
+                self.expense_tree.insert("", tk.END, values=(list[0], list[1] ,list[2] , list[3]))
 
             # BUTTONS FRAME
             button_frame = tk.Frame(container, bg = "#283618")
@@ -260,6 +269,32 @@ class ExpenseTrackerApp:
             # CALL CENTER FUNCTION
             self.center_window(report_window)
     
+
+    # FUNCTION TO SORT THE CONTENT OF EXPENSE REPORTS
+    def sort_treeview(self, col, reverse=False):
+        """Sort treeview column when clicked on the heading."""
+        data = [(self.expense_tree.set(item, col), item) for item in self.expense_tree.get_children("")]
+        
+        # Try to sort numerically, if applicable
+        try:
+            data.sort(key=lambda x: float(x[0]), reverse=reverse)
+        except ValueError:
+            data.sort(reverse=reverse)
+
+        # Rearrange items in sorted order
+        for index, (val, item) in enumerate(data):
+            self.expense_tree.move(item, '', index)
+
+        # Toggle sort order for next click
+        self.expense_tree.heading(col, command=lambda: self.sort_treeview(col, not reverse))
+
+    # FUNCTION TO CHANGE REPORT NAME
+    def changeReportName(self, report_id):
+        changed_name = simpledialog.askstring("Change Report Name", "Change Report Name to:")
+        if changed_name:  # Ensure it's not None (user didn't cancel)
+            db.changeReportName(report_id, changed_name)
+            self.reportNameLabel.config(text=changed_name.upper())
+
     # SHOW GRAPH FUNCTION
     def show_graph(self):
         # SHOW GRAPH WINDOW
@@ -295,24 +330,25 @@ class ExpenseTrackerApp:
         button_frame = tk.Frame(container, bg="#283618")
         button_frame.pack(pady=5)
 
-        # FUNCTION FOR UPDATING GRAPH
         def update_graph(timeframe):
-            # """Fetch data, regenerate the pie chart, and update the displayed image."""
-            # CALL A USER-DEFINED FUNCTION THAT FETCHES_DATA FROM DATABASE THEN RECORD AS A COMMA-SEPARATED-VALUES (.csv) FILE
-            # TO USE IT ON PANDAS AND MATPLOTLIB
-            plotter.fetch_data(timeframe, self.report_values[0], self.report_values[1])  # Generates a new 'figure.png'
+            # Fetch data first
+            data = plotter.fetch_data(timeframe, self.report_values[0], self.report_values[1])  
             
+            # If no data is found, show alert and stop execution
+            if not data:
+                return  # Exit the function early
+
             # UPDATE THE IMAGE ON THE OPENED GRAPH WINDOW
             try:
                 img = Image.open('figure.png')
                 img = img.resize((400, 300), Image.LANCZOS)
                 self.img = ImageTk.PhotoImage(img)  # Keep a reference to prevent garbage collection
-                
+
                 self.figure_label.configure(image=self.img)  # Update the displayed image
                 self.figure_label.image = self.img  # Keep reference
-                
+
             except Exception as e:
-                self.figure_label.configure(text="Error loading image", image=None)       
+                self.figure_label.configure(text="Error loading image", image=None)
 
 
         # TIMELINE BUTTONS
@@ -410,7 +446,7 @@ class ExpenseTrackerApp:
                 expense_no = latest_expense_no + 1  # Always starts at 1 if no expenses exist
                 
                 db.add_expense_to_db(expense_no, self.report_values[0], date, category, amount)
-                self.expense_tree.insert("", 0, values=(date, category, amount), tags=("new_entry",))
+                self.expense_tree.insert("", 0, values=(expense_no, date, category, amount), tags=("new_entry",))
                 add_expense_window.destroy()
             else:
                 messagebox.showwarning("Input Error", "All fields must be filled!")
@@ -450,12 +486,16 @@ class ExpenseTrackerApp:
 
             self.expense_tree.delete(item)
 
-        # UPDATE THE TOTAL EXPENSE ON THE REPORT FROM THE DATABASE
-        db.update_total_expense(self.report_values[0])
+
+        print(removed_expense_nos)
 
         # Remove each expense from the database
         for expense_no in removed_expense_nos:
             db.delete_expense(self.report_values[0], expense_no)
+        
+        # UPDATE THE TOTAL EXPENSE ON THE REPORT FROM THE DATABASE
+        db.update_total_expense(self.report_values[0])
+
     
     # BACK TO DASHBOARD FUNCTION
     def back_to_dashboard(self, report_window):
@@ -515,20 +555,20 @@ class ExpenseTrackerApp:
         # DATE ENTRY
         tk.Label(frame, text="Date (YYYY-MM-DD):", bg = "#283618", font = ("Montserrat", 10), fg = "#fefae0").grid(row=0, column=0, sticky="e", padx=5, pady=5)
         date_entry = tk.Entry(frame, width=entry_width, justify="center")
-        date_entry.insert(0, values[0])
+        date_entry.insert(0, values[1])
         date_entry.grid(row=0, column=1, padx=5, pady=5)
         
         # CATEGORY ENTRY
         tk.Label(frame, text="Category:", bg = "#283618", font = ("Montserrat", 10), fg = "#fefae0").grid(row=1, column=0, sticky="e", padx=5, pady=5)
         category_var = tk.StringVar()
         category_dropdown = ttk.Combobox(frame, textvariable=category_var, values=["Travel", "Food", "Clothes", "Bills", "Health", "Personal"], width=entry_width - 2, state="readonly")
-        category_dropdown.set(values[1])
+        category_dropdown.set(values[2])
         category_dropdown.grid(row=1, column=1, padx=5, pady=5)
         
         # AMOUNT ENTRY
         tk.Label(frame, text="Amount:", bg = "#283618", font = ("Montserrat", 10), fg = "#fefae0").grid(row=2, column=0, sticky="e", padx=5, pady=5)
         amount_entry = tk.Entry(frame, width=entry_width, justify="center")
-        amount_entry.insert(0, values[2])
+        amount_entry.insert(0, values[3])
         amount_entry.grid(row=2, column=1, padx=5, pady=5)
                 
         # SAVE UPDATE FUNCTION
@@ -563,31 +603,34 @@ class ExpenseTrackerApp:
                 return
 
             # GET THE CURRENT SELECTION
-            if new_date and new_category and new_amount:
-                selected_item = self.expense_tree.selection()
+            selected_items = self.expense_tree.selection()  # Returns a tuple of selected item IDs
 
-                # IF THERE IS A VALUE PROCEED TO THE CONTROL
-                if selected_item:
-                    values = self.expense_tree.item(selected_item, "values")
-                    expense_no = values[0]  # Extract the expense_no from the selected row
+            # Ensure something is selected
+            if not selected_items:
+                messagebox.showwarning("Selection Error", "No expense selected for updating.")
+                return
 
-                    # Update the treeview with the new values
-                    self.expense_tree.item(selected_item, values=(new_date, new_category, new_amount))
+            selected_item = selected_items[0]  # Get first selected item
 
-                    # Update the database
-                    db.update_expense_to_db(expense_no, self.report_values[0], new_date, new_category, new_amount)
+            # Extract values from the selected row
+            values = self.expense_tree.item(selected_item, "values")
 
-                    # Close the update expense window
-                    update_expense_window.destroy()
-                else:
-                    # Error for no selected entry to update
-                    messagebox.showwarning("Selection Error", "No expense selected for updating.")
+            if values:
+                expense_no = values[0]  # Extract expense_no from the selected row
+
+                # Update the Treeview with new values
+                self.expense_tree.item(selected_item, values=(expense_no, new_date, new_category, new_amount))
+
+                # Update the database
+                db.update_expense_to_db(expense_no, self.report_values[0], new_date, new_category, new_amount)
+
+                # Close the update expense window
+                update_expense_window.destroy()
+
+                # Update total expense in the database
+                db.update_total_expense(self.report_values[0])
             else:
-                # Error for incomplete entries
-                messagebox.showwarning("Input Error", "All fields must be filled!")
-
-        # UPDATE THE TOTAL EXPENSE OF THE REPORT_ID IN THE DATABASE
-        db.update_total_expense(self.report_values[0])
+                messagebox.showwarning("Selection Error", "Selected item does not exist.")
 
         # SAVE BUTTON
         self.saveBtnImg = tk.PhotoImage(file="./buttons/saveExpenseBtn.png")

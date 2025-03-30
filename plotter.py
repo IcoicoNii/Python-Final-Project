@@ -1,33 +1,71 @@
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+import sqlite3
+import re
 
 # Function for getting data from Database
 def fetch_data(timeframe, report_id, report_name):
-
     # Declaring target table
     targetTable = f"Expenses_Report_{report_id}"
 
-    # """Fetch expense data based on the selected timeframe."""
+    # Connect to the database
     conn = sqlite3.connect("expense_tracker.db")  # Adjust to your DB file
     cursor = conn.cursor()
 
     # SQL query based on timeframe
+    data = []
+    
     if timeframe == "Daily":
-        cursor.execute(f"SELECT category, SUM(amount) FROM {targetTable} WHERE date = DATE('now') GROUP BY category")
-    elif timeframe == "Weekly":
-        cursor.execute(f"SELECT category, SUM(amount) FROM {targetTable} WHERE date BETWEEN DATE('now', '-6 days') AND DATE('now') GROUP BY category")
-    elif timeframe == "Monthly":
-        cursor.execute(f"SELECT category, SUM(amount) FROM {targetTable} WHERE date BETWEEN DATE('now', '-29 days') AND DATE('now') GROUP BY category")
+        while True:
+            selected_date = simpledialog.askstring("Select Date", "Enter date (YYYY-MM-DD):")
+            if selected_date is None:  
+                return None  # If the user cancels, exit the function
 
+            date_pattern = r"^\d{4}-\d{2}-\d{2}$"
+            if not re.match(date_pattern, selected_date):
+                messagebox.showwarning("Input Error", "Date must be in YYYY-MM-DD format.")
+                continue  # Ask again if the format is incorrect
+            else:
+                break  # Exit loop if the format is valid
+
+        cursor.execute(f"SELECT category, SUM(amount) FROM {targetTable} WHERE date = ? GROUP BY category", (selected_date,))
+    
+    elif timeframe == "Weekly":
+        cursor.execute(f"""
+            SELECT category, SUM(amount) 
+            FROM {targetTable} 
+            WHERE date BETWEEN DATE('now', '-6 days') AND DATE('now') 
+            GROUP BY category
+        """)
+    
+    elif timeframe == "Monthly":
+        cursor.execute(f"""
+            SELECT category, SUM(amount) 
+            FROM {targetTable} 
+            WHERE date BETWEEN DATE('now', '-30 days') AND DATE('now') 
+            GROUP BY category
+        """)
+
+    # Fetch data
     data = cursor.fetchall()
     conn.close()
 
-    # Call function to Write the CSV File
-    write_data(data)
+    # Debugging: Print data to check if it's fetching correctly
+    print(f"Fetched Data for {timeframe}: {data}")
 
-    # Call function to generate the pie chart
+    # Check if data is empty and stop execution
+    if not data:
+        messagebox.showinfo("No Data", f"No data available for the selected {timeframe.lower()} timeframe.")
+        return None  # Return None explicitly if no data
+
+    # Proceed only if data exists
+    write_data(data)
     create_chart(timeframe, report_id, report_name)
+
+    return data  # Return data for further validation
     
 # Function for CSV file creation
 def write_data(data):
